@@ -8,7 +8,7 @@ on:
       - '**.exe'
       - '**.deb'
       - '**.zip'
-  workflow_dispatch: # Permite ejecutarlo manualmente desde la pestaña Actions
+  workflow_dispatch:
 
 jobs:
   decompress:
@@ -26,8 +26,6 @@ jobs:
       - name: Find and Decompress Files
         run: |
           mkdir -p extracted_files
-          
-          # Buscar archivos binarios recursivamente
           find . -type f \( -name "*.apk" -o -name "*.ipa" -o -name "*.exe" -o -name "*.deb" -o -name "*.zip" \) | while read -r file; do
             echo "Procesando archivo: $file"
             filename=$(basename -- "$file")
@@ -37,25 +35,19 @@ jobs:
             
             case "$extension" in
               apk|ipa|zip)
-                echo "Extrayendo archivo tipo ZIP/APK/IPA..."
-                unzip -q "$file" -d "$dirname" || echo "Aviso: Algunos errores ocurrieron al descomprimir $filename"
+                unzip -q "$file" -d "$dirname" || echo "Aviso con $filename"
                 ;;
               exe)
-                echo "Extrayendo ejecutable PE (EXE) con 7z..."
                 7z x "$file" -o"$dirname" -y
                 ;;
               deb)
-                echo "Extrayendo paquete Debian (DEB)..."
                 dpkg-deb -x "$file" "$dirname"
-                ;;
-              *)
-                echo "Formato no soportado directamente: $extension"
                 ;;
             esac
           done
 
       - name: Upload Extracted Files
-        uses: actions/artifacts@v4
+        uses: actions/upload-artifact@v4
         with:
           name: decompressed-outputs
           path: extracted_files/
