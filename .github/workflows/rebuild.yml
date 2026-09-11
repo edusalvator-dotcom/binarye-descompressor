@@ -24,31 +24,25 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y wget apksigner xmlstarlet
-          mkdir -p apktool
-          wget https://github.com -O apktool/apktool.jar
-          echo '#!/bin/bash' > apktool/apktool
-          echo 'exec java -jar "$(dirname "$0")/apktool.jar" "$@"' >> apktool/apktool
-          chmod +x apktool/apktool
-          sudo ln -s $(pwd)/apktool/apktool /usr/local/bin/apktool
+          # Descargar Apktool directamente en la raíz del espacio de trabajo
+          wget https://github.com -O apktool.jar
 
       - name: Decompile and Patch Manifest
         run: |
           # Buscar el archivo APK en el repositorio
-          APK_FILE=$(find . -name "*.apk" | head -n 1)
+          APK_FILE=$(find . -maxdepth 1 -name "*.apk" | head -n 1)
           if [ -z "$APK_FILE" ]; then
-            echo "Error: No se encontró ningún archivo APK."
+            echo "Error: No se encontró ningún archivo APK en la raíz."
             exit 1
           fi
           
-          echo "Desemsamblando APK original..."
-          apktool d "$APK_FILE" -o apk_source
+          echo "Desensamblando APK original..."
+          java -jar apktool.jar d "$APK_FILE" -o apk_source
           
           echo "Aplicando parches de versión al AndroidManifest.xml..."
-          # Modificar versionCode y versionName directamente en la estructura correcta de Apktool
           sed -i 's/versionCode="[0-9]*"/versionCode="99899"/' apk_source/AndroidManifest.xml
           sed -i 's/versionName="[0-9.]*"/versionName="9.99.9"/' apk_source/AndroidManifest.xml
           
-          # Modificar también el archivo apktool.yml para evitar conflictos de empaquetado
           if [ -f apk_source/apktool.yml ]; then
             sed -i 's/versionCode: .*/versionCode: '\''99899'\''/' apk_source/apktool.yml
             sed -i 's/versionName: .*/versionName: 9.99.9/' apk_source/apktool.yml
@@ -57,7 +51,7 @@ jobs:
       - name: Rebuild APK
         run: |
           echo "Recompilando el APK modificado..."
-          apktool b apk_source -o unsigned_output.apk
+          java -jar apktool.jar b apk_source -o unsigned_output.apk
 
       - name: Generate Keystore and Sign APK
         run: |
