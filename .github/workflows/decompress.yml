@@ -1,4 +1,4 @@
-name: Decompress Binaries
+name: Decompress and Decompile Binaries
 
 on:
   push:
@@ -21,11 +21,25 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y p7zip-full dpkg-dev
+          sudo apt-get install -y p7zip-full dpkg-dev wget unzip
 
-      - name: Find and Decompress Files
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Install JADX (Decompiler)
+        run: |
+          wget https://github.com
+          unzip -q jadx-1.5.0.zip -d jadx-tools
+          sudo ln -s $(pwd)/jadx-tools/bin/jadx /usr/local/bin/jadx
+
+      - name: Find, Decompress and Decompile Files
         run: |
           mkdir -p extracted_files
+          
+          # Buscar archivos binarios recursivamente
           find . -type f \( -name "*.apk" -o -name "*.ipa" -o -name "*.exe" -o -name "*.deb" -o -name "*.zip" \) | while read -r file; do
             echo "Procesando archivo: $file"
             filename=$(basename -- "$file")
@@ -34,13 +48,24 @@ jobs:
             mkdir -p "$dirname"
             
             case "$extension" in
-              apk|ipa|zip)
+              apk)
+                echo "Extrayendo recursos visuales del APK..."
+                unzip -q "$file" -d "$dirname" || echo "Aviso con unzip en $filename"
+                
+                echo "Descompilando código fuente del APK con JADX..."
+                mkdir -p "$dirname/source_code"
+                jadx -d "$dirname/source_code" "$file" || echo "Aviso con JADX en $filename"
+                ;;
+              ipa|zip)
+                echo "Extrayendo archivo tipo ZIP/IPA..."
                 unzip -q "$file" -d "$dirname" || echo "Aviso con $filename"
                 ;;
               exe)
+                echo "Extrayendo ejecutable PE (EXE) con 7z..."
                 7z x "$file" -o"$dirname" -y
                 ;;
               deb)
+                echo "Extrayendo paquete Debian (DEB)..."
                 dpkg-deb -x "$file" "$dirname"
                 ;;
             esac
@@ -49,6 +74,6 @@ jobs:
       - name: Upload Extracted Files
         uses: actions/upload-artifact@v4
         with:
-          name: decompressed-outputs
+          name: decompressed-and-decompiled-outputs
           path: extracted_files/
           retention-days: 5
