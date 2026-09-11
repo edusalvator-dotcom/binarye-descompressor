@@ -1,0 +1,75 @@
+name: Rebuild and Sign APK
+
+on:
+  push:
+    paths:
+      - '**.apk'
+  workflow_dispatch:
+
+jobs:
+  rebuild:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Install Android Build Tools and Apktool
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y wget apksigner xmlstarlet
+          mkdir -p apktool
+          wget https://github.com -O apktool/apktool.jar
+          echo '#!/bin/bash' > apktool/apktool
+          echo 'exec java -jar "$(dirname "$0")/apktool.jar" "$@"' >> apktool/apktool
+          chmod +x apktool/apktool
+          sudo ln -s $(pwd)/apktool/apktool /usr/local/bin/apktool
+
+      - name: Decompile and Patch Manifest
+        run: |
+          # Buscar el archivo APK en el repositorio
+          APK_FILE=$(find . -name "*.apk" | head -n 1)
+          if [ -z "$APK_FILE" ]; then
+            echo "Error: No se encontró ningún archivo APK."
+            exit 1
+          fi
+          
+          echo "Desemsamblando APK original..."
+          apktool d "$APK_FILE" -o apk_source
+          
+          echo "Aplicando parches de versión al AndroidManifest.xml..."
+          # Modificar versionCode y versionName directamente en la estructura correcta de Apktool
+          sed -i 's/versionCode="[0-9]*"/versionCode="99899"/' apk_source/AndroidManifest.xml
+          sed -i 's/versionName="[0-9.]*"/versionName="9.99.9"/' apk_source/AndroidManifest.xml
+          
+          # Modificar también el archivo apktool.yml para evitar conflictos de empaquetado
+          if [ -f apk_source/apktool.yml ]; then
+            sed -i 's/versionCode: .*/versionCode: '\''99899'\''/' apk_source/apktool.yml
+            sed -i 's/versionName: .*/versionName: 9.99.9/' apk_source/apktool.yml
+          fi
+
+      - name: Rebuild APK
+        run: |
+          echo "Recompilando el APK modificado..."
+          apktool b apk_source -o unsigned_output.apk
+
+      - name: Generate Keystore and Sign APK
+        run: |
+          echo "Generando llave digital temporal..."
+          keytool -genkey -v -keystore test.keystore -alias test_alias -keyalg RSA -keysize 2048 -validity 10000 -storepass android -keypass android -dname "CN=Android, OU=Test, O=Test, L=Test, S=Test, C=US"
+          
+          echo "Firmando el APK resultante..."
+          apksigner sign --ks test.keystore --ks-key-alias test_alias --ks-pass pass:android --key-pass pass:android --out modified_patched_app.apk unsigned_output.apk
+
+      - name: Upload Patched APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: fixed-apk-output
+          path: modified_patched_app.apk
+          retention-days: 5
