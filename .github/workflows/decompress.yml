@@ -31,7 +31,7 @@ jobs:
 
       - name: Install JADX (Decompiler)
         run: |
-          wget https://github.com
+          wget https://github.com/skylot/jadx/releases/download/v1.5.0/jadx-1.5.0.zip
           unzip -q jadx-1.5.0.zip -d jadx-tools
           sudo ln -s $(pwd)/jadx-tools/bin/jadx /usr/local/bin/jadx
 
